@@ -24,9 +24,6 @@ jobs:
       attestations: write
       artifact-metadata: write
 
-    env:
-      KEYSTORE: ${{ secrets.KEYSTORE }}
-
     outputs:
       versionName: ${{ steps.buildWithGradle.outputs.versionName }}
       debugArtifact: ${{ steps.buildWithGradle.outputs.debugArtifact }}
@@ -79,22 +76,39 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      # Both variants are built and released every run, so the release APK always needs
-      # its signing secrets. Missing ones are a configuration error, not a debug build.
-      - name: Validate Signing Config
+      # Standard Android Studio key: debug keystore with fixed parameters
+      # (password "android", alias "androiddebugkey", key password "android").
+      # Android Studio generates it separately on each computer, so we do the same here
+      # and store it in the cache to ensure subsequent builds use the same signature
+      # (otherwise, APKs from different builds cannot be installed as updates).
+      # Note: the cache is deleted after 7 days of inactivity.
+      - name: Restore Debug Keystore
+        id: keystoreCache
+        uses: actions/cache@v4
+        with:
+          path: key.jks
+          key: android-debug-keystore-v1
+
+      - name: Generate Debug Keystore
+        if: steps.keystoreCache.outputs.cache-hit != 'true'
         run: |
-          if [ "$KEYSTORE" = "" ]; then
-            echo "::error::Signing secrets not configured. The release APK has to be signed."
-            exit 1
-          fi
+          keytool -genkeypair -v \
+            -keystore key.jks \
+            -storetype JKS \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
 
       - name: Create signing.properties
         run: |
-          echo KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }} > signing.properties
-          echo KEYSTORE_ALIAS=${{ secrets.KEYSTORE_ALIAS }} >> signing.properties
-          echo KEYSTORE_ALIAS_PASSWORD='${{ secrets.KEYSTORE_ALIAS_PASSWORD }}' >> signing.properties
-          echo KEYSTORE_FILE=../key.jks >> signing.properties
-          echo ${{ secrets.KEYSTORE }} | base64 --decode > key.jks
+          cat > signing.properties <<'EOF'
+          KEYSTORE_PASSWORD=android
+          KEYSTORE_ALIAS=androiddebugkey
+          KEYSTORE_ALIAS_PASSWORD=android
+          KEYSTORE_FILE=../key.jks
+          EOF
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
