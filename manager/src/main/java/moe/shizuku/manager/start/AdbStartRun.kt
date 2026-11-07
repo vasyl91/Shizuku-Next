@@ -145,6 +145,8 @@ class AdbStartRun(
             // interface, so it goes away with the attempt that needed it: leaving it up
             // would be tethering nobody asked for.
             ForcedWirelessDebugging.releaseHotspot()
+            // And the Wi-Fi it may have taken down with it, on a device whose radio cannot do both.
+            ForcedWirelessDebugging.restoreClientWifi(applicationContext)
         }
     }
 

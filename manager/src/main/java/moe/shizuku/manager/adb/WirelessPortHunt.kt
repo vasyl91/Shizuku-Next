@@ -213,7 +213,8 @@ class WirelessPortHunt(
                     onFailFast = { reason ->
                         Diag.warn(AppConstants.TAG, "Forced wireless debugging gave up: $reason")
                         fail(IllegalStateException("the local-only hotspot was refused: $reason"))
-                    }
+                    },
+                    onNetworkChanged = { restartDiscovery() }
                 ) {
                     startDiscovery()
                 }
@@ -226,6 +227,19 @@ class WirelessPortHunt(
     @RequiresApi(Build.VERSION_CODES.R)
     private fun startDiscovery() {
         val discovery = synchronized(lock) { if (closed) null else mdns } ?: return
+        discovery.start()
+        state.update { it.copy(discovering = true) }
+    }
+
+    /**
+     * Starts the search again over whatever interface there is now. The forced start gives its
+     * hotspot up for Wi-Fi, and takes it again, on a device where the two cannot coexist; a search
+     * that began over the other one may never be sent a query on this one.
+     */
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun restartDiscovery() {
+        val discovery = synchronized(lock) { if (closed) null else mdns } ?: return
+        discovery.stop()
         discovery.start()
         state.update { it.copy(discovering = true) }
     }
