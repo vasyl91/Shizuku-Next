@@ -127,7 +127,8 @@ jobs:
           # lintDebug is the API-level gate: it fails on a call to an API newer than minSdk,
           # which is a crash the compiler does not catch and no unit test can reach without an
           # old device. It is listed first so that failure is read before the APKs are built.
-          CMD="./gradlew :manager:lintDebug :manager:assembleDebug :manager:assembleRelease"
+          # The JVM unit tests run with it, so a test build is also a test run.
+          CMD="./gradlew :manager:lintDebug :manager:testDebugUnitTest :manager:assembleDebug :manager:assembleRelease"
           [ "${{ inputs.prerelease }}" = "true" ] && CMD="$CMD -Pbeta"
 
           eval $CMD
