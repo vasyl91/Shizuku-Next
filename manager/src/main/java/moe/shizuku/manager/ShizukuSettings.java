@@ -49,6 +49,9 @@ public class ShizukuSettings {
 
         /** Whether quick tiles refuse changes while the device is locked. */
         public static final String KEY_SECURE_QUICK_TILES = "secure_quick_tiles";
+
+        /** Whether creating a grant has to be confirmed with device authentication. */
+        public static final String KEY_REQUIRE_GRANT_AUTHENTICATION = "require_grant_authentication";
         public static final String KEY_UPDATE_MODE = "update_mode";
         public static final String KEY_HELP = "help";
         public static final String KEY_REPORT_BUG = "report_bug";
@@ -67,6 +70,19 @@ public class ShizukuSettings {
         public static final String KEY_WAIT_FOR_WIFI = "wait_for_wifi";
         public static final String KEY_FORCE_WIRELESS_DEBUGGING = "force_wireless_debugging";
         public static final String KEY_PERSIST_ADB_PORT = "persist_adb_port";
+
+        /** Whether the persistent ADB port was written by the no-network fallback, not by the user. */
+        public static final String KEY_PERSIST_ADB_PORT_AUTO = "persist_adb_port_auto";
+
+        /** The user switched the persistent ADB port off, so the fallback must not turn it back on. */
+        public static final String KEY_PERSIST_ADB_PORT_DECLINED = "persist_adb_port_declined";
+
+        /** The build fingerprint on which the platform refused the persistent ADB port. */
+        public static final String KEY_PERSIST_ADB_PORT_REFUSED_BUILD = "persist_adb_port_refused_build";
+
+        /** The build fingerprint on which a local-only hotspot was seen to take the Wi-Fi client down. */
+        public static final String KEY_HOTSPOT_DISPLACES_WIFI_BUILD = "hotspot_displaces_wifi_build";
+
         public static final String KEY_SYSTEM_START_METHOD = "system_start_method";
 
         /** Whether the start and stop intents have to carry the auth token. */
@@ -515,6 +531,53 @@ public class ShizukuSettings {
     }
 
     /**
+     * Whether the persistent ADB port was written by the no-network fallback rather than by the
+     * user, so the fallback knows it may take it back when the start no longer needs it.
+     */
+    public static boolean getPersistAdbPortAuto() {
+        return getPreferences().getBoolean(Keys.KEY_PERSIST_ADB_PORT_AUTO, false);
+    }
+
+    public static void setPersistAdbPortAuto(boolean auto) {
+        getPreferences().edit().putBoolean(Keys.KEY_PERSIST_ADB_PORT_AUTO, auto).apply();
+    }
+
+    /** Whether the user switched the persistent ADB port off; the fallback then leaves it off. */
+    public static boolean getPersistAdbPortDeclined() {
+        return getPreferences().getBoolean(Keys.KEY_PERSIST_ADB_PORT_DECLINED, false);
+    }
+
+    public static void setPersistAdbPortDeclined(boolean declined) {
+        getPreferences().edit().putBoolean(Keys.KEY_PERSIST_ADB_PORT_DECLINED, declined).apply();
+    }
+
+    /**
+     * The build fingerprint on which the platform refused the persistent ADB port, or null. Kept
+     * per build so an OTA, which can change the policy, gets asked again.
+     */
+    @Nullable
+    public static String getPersistAdbPortRefusedBuild() {
+        return getPreferences().getString(Keys.KEY_PERSIST_ADB_PORT_REFUSED_BUILD, null);
+    }
+
+    public static void setPersistAdbPortRefusedBuild(@Nullable String fingerprint) {
+        getPreferences().edit().putString(Keys.KEY_PERSIST_ADB_PORT_REFUSED_BUILD, fingerprint).apply();
+    }
+
+    /**
+     * The build fingerprint on which a local-only hotspot was seen to take the Wi-Fi client down,
+     * or null. A platform can say its radio does both and still not do it; what was seen wins.
+     */
+    @Nullable
+    public static String getHotspotDisplacesWifiBuild() {
+        return getPreferences().getString(Keys.KEY_HOTSPOT_DISPLACES_WIFI_BUILD, null);
+    }
+
+    public static void setHotspotDisplacesWifiBuild(@Nullable String fingerprint) {
+        getPreferences().edit().putString(Keys.KEY_HOTSPOT_DISPLACES_WIFI_BUILD, fingerprint).apply();
+    }
+
+    /**
      * Which method the "Start (system)" card uses to launch Shizuku under the
      * system UID: the built-in device exploit, or an external/custom launch.
      */
@@ -612,6 +675,19 @@ public class ShizukuSettings {
 
     public static void setSecureQuickTiles(boolean enable) {
         getPreferences().edit().putBoolean(Keys.KEY_SECURE_QUICK_TILES, enable).apply();
+    }
+
+    /**
+     * Whether creating a grant has to be confirmed with the device's authentication.
+     *
+     * Off by default, so an existing phone behaves the same after updating. Revoking never asks.
+     */
+    public static boolean getRequireGrantAuthentication() {
+        return getPreferences().getBoolean(Keys.KEY_REQUIRE_GRANT_AUTHENTICATION, false);
+    }
+
+    public static void setRequireGrantAuthentication(boolean enable) {
+        getPreferences().edit().putBoolean(Keys.KEY_REQUIRE_GRANT_AUTHENTICATION, enable).apply();
     }
 
     /**

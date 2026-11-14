@@ -16,9 +16,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -28,7 +31,9 @@ import moe.shizuku.manager.start.ForcedWirelessDebugging
 import moe.shizuku.manager.start.StartTransport
 import moe.shizuku.manager.start.WirelessPortLog
 import moe.shizuku.manager.start.writeGlobalSetting
+import moe.shizuku.manager.utils.DebugSwitchState
 import moe.shizuku.manager.utils.Diag
+import moe.shizuku.manager.utils.EnvironmentUtils
 
 /**
  * Everything that has to be going on for a wireless (TLS) port to be found, for as long as one is
@@ -162,16 +167,20 @@ class WirelessPortHunt(
         }
         val watcher = object : ContentObserver(null) {
             override fun onChange(selfChange: Boolean) {
-                when (Settings.Global.getInt(cr, "adb_wifi_enabled", 0)) {
+                when (EnvironmentUtils.wirelessDebuggingState()) {
                     // Reading 0 is the framework refusing the setting again, which is precisely the
                     // state the experiment is asking it out of, so it must not end the attempt:
                     // closing here killed the whole thing about a second in, before the hotspot was
                     // up or the writes had a chance, and the result was a start that only ever said
                     // it was waiting.
-                    0 -> if (awaitingAuth && !forced) {
+                    DebugSwitchState.OFF -> if (awaitingAuth && !forced) {
                         fail(SecurityException("Network is not authorized for wireless debugging"))
                     } else handleAuth()
-                    1 -> startDiscovery()
+                    DebugSwitchState.ON -> startDiscovery()
+                    // Android 17 QPR3 hides the setting, so 0 no longer says the framework
+                    // turned it off. Keep the search alive instead of treating a redacted read
+                    // as an authorization failure.
+                    DebugSwitchState.UNKNOWN -> if (!forced) startDiscovery()
                 }
             }
         }
@@ -219,8 +228,29 @@ class WirelessPortHunt(
                     startDiscovery()
                 }
             }
+            // Where the platform lets an app read it, the wireless port is also in a property the
+            // daemon sets when its server comes up, and that answer does not depend on NsdManager
+            // sending a query on an interface that appeared after the search was registered. A
+            // head unit that waits for Wi-Fi instead of raising a hotspot reads it there; where
+            // the read is refused it is -1 and this does nothing.
+            scope.launch { watchTlsProperty() }
         } else {
             startDiscovery()
+        }
+    }
+
+    /** Reports the port in `service.adb.tls.port` whenever it changes and something answers on it. */
+    private suspend fun watchTlsProperty() {
+        var reported = -1
+        while (currentCoroutineContext().isActive) {
+            // A failed read is no answer, not the end of the hunt: what this scope throws ends it.
+            val port = runCatching { EnvironmentUtils.getAdbTlsPort() }.getOrDefault(-1)
+            if (port > 0 && port != reported && AdbStarter.isPortListening(port)) {
+                reported = port
+                WirelessPortLog.resolved(port, StartTransport.PortSource.TLS_PROPERTY)
+                state.update { it.copy(port = port) }
+            }
+            delay(TLS_PROPERTY_POLL_MS)
         }
     }
 
@@ -303,5 +333,10 @@ class WirelessPortHunt(
         toUnregister?.let { runCatching { appContext.unregisterReceiver(it) } }
         nudgeJob?.cancel()
         scope.cancel()
+    }
+
+    private companion object {
+        /** How often the forced search looks at the wireless port's property. */
+        const val TLS_PROPERTY_POLL_MS = 1_000L
     }
 }
