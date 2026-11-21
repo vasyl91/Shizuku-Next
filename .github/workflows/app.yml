@@ -342,6 +342,12 @@ jobs:
         env:
           VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
         run: |
+          # A fork without the key builds test APKs, not public releases: skip the scan
+          # rather than fail the release job before the draft is made.
+          if [ -z "$VIRUSTOTAL_API_KEY" ]; then
+            echo "::notice::VIRUSTOTAL_API_KEY is not set, skipping the scan"
+            exit 0
+          fi
           APK=$(find files -maxdepth 1 -type f -name '*.apk' ! -name '*-debug.apk' -print -quit)
           if [ -z "$APK" ]; then
             echo "::error::Release APK was not downloaded"
