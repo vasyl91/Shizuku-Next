@@ -157,6 +157,12 @@ jobs:
 
           echo "versionName=$VERSION" >> $GITHUB_OUTPUT
 
+      # Gradle stops at lint's first error; the report has all of them.
+      - name: Print Lint Report
+        if: failure()
+        run: |
+          find manager/build -name 'lint-results-debug.txt' -print -exec cat {} \; || true
+
       - name: Upload Debug Artifact
         uses: actions/upload-artifact@v6
         with:
